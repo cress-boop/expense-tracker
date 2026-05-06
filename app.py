@@ -3,33 +3,59 @@ import pandas as pd
 import plotly.express as px
 from data_handler import load_data, add_expense, delete_expense, update_expense
 from utils import format_currency
+from auth import register_user, login_user
 
 st.set_page_config(page_title="Expense Tracker", page_icon="💰", layout="wide")
 
-# SESSION LOGIN STATE
+# SESSION STATE
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# ================= LOGIN PAGE =================
+menu = st.sidebar.selectbox("Menu", ["Login", "Register"])
+
+# ================= LOGIN =================
 if st.session_state.user is None:
-    st.title("🔐 Login - Expense Tracker")
 
-    username = st.text_input("Enter Username")
-    password = st.text_input("Enter Password", type="password")
+    if menu == "Login":
+        st.title("🔐 Login")
 
-    if st.button("Login / Register"):
-        if username and password:
-            st.session_state.user = username
-            st.success(f"Welcome {username}!")
-            st.rerun()
-        else:
-            st.warning("Please enter username and password")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+
+        if st.button("Login"):
+            if login_user(username, password):
+                st.session_state.user = username
+                st.success("Login successful!")
+                st.rerun()
+            else:
+                st.error("❌ Wrong username or password")
+
+    # ================= REGISTER =================
+    elif menu == "Register":
+        st.title("📝 Register")
+
+        new_user = st.text_input("Create Username")
+        new_pass = st.text_input("Create Password", type="password")
+
+        if st.button("Register"):
+            if register_user(new_user, new_pass):
+                st.success("Account created! You can now login.")
+            else:
+                st.error("⚠ Username already exists")
 
 # ================= MAIN APP =================
 else:
     user = st.session_state.user
 
-    st.title(f"💰 Smart Expense Tracker - {user}")
+    st.title(f"💰 Expense Tracker - {user}")
+
+    # PROFILE VIEW
+    st.subheader("👤 Profile")
+    st.write(f"Username: **{user}**")
+
+    if st.button("🚪 Logout"):
+        st.session_state.user = None
+        st.rerun()
 
     # GROUP INFO
     st.markdown("""
@@ -41,13 +67,9 @@ else:
     • SINGSON, FATIMA CEMILLE M.  
     """)
 
-    if st.button("🚪 Logout"):
-        st.session_state.user = None
-        st.rerun()
-
     df = load_data(user)
 
-    # SIDEBAR INPUT
+    # ADD EXPENSE
     st.sidebar.header("➕ Add Expense")
 
     date = st.sidebar.date_input("Date")
@@ -55,38 +77,21 @@ else:
     amount = st.sidebar.number_input("Amount", min_value=0.0)
     description = st.sidebar.text_input("Description")
 
-    if st.sidebar.button("Add Expense"):
+    if st.sidebar.button("Add"):
         df = add_expense(df, user, str(date), category, amount, description)
         st.sidebar.success("Added!")
 
     # METRICS
     total = df["Amount"].sum()
-    highest = df["Amount"].max() if not df.empty else 0
-    count = len(df)
+    st.metric("💸 Total Expenses", format_currency(total))
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("💸 Total", format_currency(total))
-    col2.metric("📈 Highest", format_currency(highest))
-    col3.metric("🧾 Entries", count)
-
-    st.markdown("---")
-
-    # CHARTS
+    # CHART
     if not df.empty:
-        col4, col5 = st.columns(2)
+        fig = px.pie(df, names="Category", values="Amount")
+        st.plotly_chart(fig)
 
-        with col4:
-            fig = px.pie(df, names="Category", values="Amount")
-            st.plotly_chart(fig)
-
-        with col5:
-            df["Date"] = pd.to_datetime(df["Date"])
-            trend = df.groupby("Date")["Amount"].sum().reset_index()
-            fig2 = px.line(trend, x="Date", y="Amount")
-            st.plotly_chart(fig2)
-
-    # EDIT + DELETE
-    st.subheader("📋 Manage Expenses")
+    # EDIT / DELETE
+    st.subheader("📋 Your Expenses")
 
     if not df.empty:
         for i, row in df.iterrows():
@@ -114,4 +119,4 @@ else:
                         st.session_state[f"edit_{i}"] = False
                         st.rerun()
     else:
-        st.info("No data yet")
+        st.info("No expenses yet")
